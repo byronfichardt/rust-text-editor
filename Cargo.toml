@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 termion = "3.0.0"
 unicode-segmentation = "1.11.0"
+regex = "1"
