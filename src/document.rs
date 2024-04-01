@@ -17,7 +17,9 @@ impl Document {
         let file = fs::read_to_string(filename)?;
         let mut rows = Vec::new();
         for line in file.lines() {
-            rows.push(Row::from(line))
+            let mut line = Row::from(line);
+            line.highlight(None);
+            rows.push(line)
         }
 
         Ok(Self {
@@ -42,10 +44,12 @@ impl Document {
         if at.y == self.len() {
             let mut row = Row::default();
             row.insert(0, c);
+            row.highlight(None);
             self.rows.push(row);
         } else if at.y < self.len() {
             let row = self.rows.get_mut(at.y).unwrap();
             row.insert(at.x, c);
+            row.highlight(None);
         }
     }
     pub fn find(&mut self, query: &str, cursor_position: &Position) -> Option<Position> {
@@ -65,6 +69,10 @@ impl Document {
             return;
         }
         let new_row = self.rows.get_mut(at.y).unwrap().split(at.x);
+        let current_row = &mut self.rows[at.y];
+        let mut new_row = current_row.split(at.x);
+        current_row.highlight(None);
+        new_row.highlight(None);
         #[allow(clippy::arithmetic_side_effects)]
         self.rows.insert(at.y + 1, new_row)
     }
@@ -79,17 +87,20 @@ impl Document {
             let next_row = self.rows.remove(at.y + 1);
             let row = self.rows.get_mut(at.y).unwrap();
             row.append(&next_row);
+            row.highlight(None)
         } else {
             let row = self.rows.get_mut(at.y).unwrap();
             row.delete(at.x);
+            row.highlight(None)
         }
     }
     pub fn delete_row(&mut self, at: usize) {
         self.dirty = true;
         self.rows.remove(at);
     }
-    pub fn insert_row(&mut self, row: Row, at: usize) {
+    pub fn insert_row(&mut self, mut row: Row, at: usize) {
         self.dirty = true;
+        row.highlight(None);
         self.rows.insert(at, row)
     }
     pub fn row(&self, index: usize) -> Option<&Row> {
@@ -111,5 +122,10 @@ impl Document {
             self.dirty = false;
         }
         Ok(())
+    }
+    pub fn highlight(&mut self, query: Option<&String>) {
+        for row in &mut self.rows {
+            row.highlight(query);
+        }
     }
 }

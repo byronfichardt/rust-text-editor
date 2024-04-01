@@ -10,8 +10,8 @@ use termion::event::Key;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
 const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63);
-// this is pretty cool i think
 
+// this is pretty cool i think
 enum EditorMode {
     Normal, 
     CtrlXPressed
@@ -166,15 +166,7 @@ impl Editor {
                 // remove line at cursor
                 self.document.delete_row(self.cursor_position.y)
             }
-            Key::Ctrl('f') => {
-                if let Some(query) = self.prompt("Search: ").unwrap_or(None) {
-                    if let Some(position) = self.document.find(&query[..], &self.cursor_position) {
-                        self.cursor_position = position;
-                    } else {
-                        self.status_message = StatusMessage::from(format!("Not found :{}.", query));
-                    }
-                }
-            }
+            Key::Ctrl('f') => self.search(),
             Key::Ctrl('s') => self.save(),
             Key::Char(c) => {
                 self.document.insert(&self.cursor_position, c);
@@ -210,10 +202,22 @@ impl Editor {
         self.scroll();
         Ok(())
     }
+
+    fn search(&mut self) {
+        if let Some(query) = self.prompt("Search: ").unwrap_or(None) {
+            if let Some(position) = self.document.find(&query[..], &self.cursor_position) {
+                self.document.highlight(Some(&query));
+                self.cursor_position = position;
+            } else {
+                self.status_message = StatusMessage::from(format!("Not found :{}.", query));
+            }
+        }
+        self.document.highlight(None);
+    }
     fn move_row(&mut self, key: Key) {
         let Position {x:_, y} = self.cursor_position;
         if let Some(row) = self.document.row(y) {
-            let new_row = row.clone();
+            let mut new_row = row.clone();
             self.document.delete_row(y);
             match key {
                 Key::Up => {
