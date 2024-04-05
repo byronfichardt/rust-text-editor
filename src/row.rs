@@ -1,14 +1,11 @@
 use std::cmp;
 use termion::color;
-use unicode_segmentation::{Graphemes, UnicodeSegmentation};
-use crate::highlighting;
+use unicode_segmentation::UnicodeSegmentation;
 
-#[derive(Default)]
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct Row {
     string: String,
     len: usize,
-    highlighting: Vec<highlighting::Type>
 }
 
 impl From<&str> for Row {
@@ -16,7 +13,6 @@ impl From<&str> for Row {
         let mut row = Self {
             string: String::from(slice),
             len: 0,
-            highlighting: Vec::new()
         };
         row.update_len();
         row
@@ -27,17 +23,15 @@ impl Row {
     pub fn render(&self, start: usize, end: usize) -> String {
         let end = cmp::min(end, self.string.len());
         let start = cmp::min(start, end);
-        let mut current_highlight = &highlighting::Type::None;
         let mut result = String::new();
         #[allow(clippy::arithmetic_side_effects)]
-        for (index, grapheme) in self.string[..].graphemes(true).enumerate().skip(start).take(end-start) {
+        for (index, grapheme) in self.string[..]
+            .graphemes(true)
+            .enumerate()
+            .skip(start)
+            .take(end - start)
+        {
             if let Some(c) = grapheme.chars().next() {
-                let highlighting_type = self.highlighting.get(index).unwrap_or(&highlighting::Type::None);
-                if highlighting_type != current_highlight {
-                    current_highlight = highlighting_type;
-                    let start_highlighting = format!("{}", termion::color::Fg(highlighting_type.to_color()));
-                    result.push_str(&start_highlighting[..]);
-                }
                 if grapheme == "\t" {
                     result.push_str(" ");
                 } else {
@@ -45,8 +39,6 @@ impl Row {
                 }
             }
         }
-        let end_highlighting = format!("{}", termion::color::Fg(color::Reset));
-        result.push_str(&end_highlighting[..]);
         result
     }
     pub fn insert(&mut self, x_position: usize, c: char) {
@@ -68,7 +60,9 @@ impl Row {
     pub fn find(&self, query: &str) -> Option<usize> {
         let matching_byte_index = self.string.find(query);
         if let Some(matching_byte_index) = matching_byte_index {
-            for (grapheme_index, (byte_index, _)) in self.string[..].grapheme_indices(true).enumerate() {
+            for (grapheme_index, (byte_index, _)) in
+                self.string[..].grapheme_indices(true).enumerate()
+            {
                 if matching_byte_index == byte_index {
                     return Some(grapheme_index);
                 }
@@ -79,13 +73,16 @@ impl Row {
     #[allow(clippy::arithmetic_side_effects)]
     pub fn delete(&mut self, at: usize) {
         if at >= self.len() {
-            return 
+            return;
         }
         let mut result: String = self.string[..].graphemes(true).take(at).collect();
-        let split: String = self.string[..].graphemes(true).skip(at.saturating_add(1)).collect();
+        let split: String = self.string[..]
+            .graphemes(true)
+            .skip(at.saturating_add(1))
+            .collect();
         result.push_str(&split);
         self.string = result;
-        
+
         self.update_len();
     }
     pub fn split(&mut self, at: usize) -> Self {
@@ -109,39 +106,5 @@ impl Row {
     }
     pub fn is_equal(&self, line: &str) -> bool {
         self.string == line
-    }
-    pub fn highlight(&mut self, query: Option<&String>) {
-        let mut highlighting = Vec::new();
-        let chars: Vec<char> = self.string.chars().collect();
-        let mut matches = Vec::new();
-        let mut search_index = 0;
-
-        if let Some(query) = query {
-            if let Some(search_match) = self.find(query) {
-                matches.push(search_match);
-            }
-        }
-
-        let mut index = 0;
-        while let Some(c) = chars.get(index) {
-            if let Some(query) = query {
-                if matches.contains(&index) {
-                    for _ in query[..].graphemes(true) {
-                        index += 1;
-                        highlighting.push(highlighting::Type::Match);
-                    }
-                    continue;
-                }
-            }
-
-            if c.is_ascii_digit() {
-                highlighting.push(highlighting::Type::Number);
-            } else {
-                highlighting.push(highlighting::Type::None);
-            }
-            index += 1;
-        }
-
-        self.highlighting = highlighting;
     }
 }

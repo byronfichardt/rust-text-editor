@@ -4,6 +4,11 @@ use std::{
 };
 
 use crate::{Position, Row};
+use syntect::{easy::HighlightLines, parsing::SyntaxSet};
+use syntect::{
+    highlighting::{Style, ThemeSet},
+    util::as_24_bit_terminal_escaped,
+};
 
 #[derive(Default)]
 pub struct Document {
@@ -16,9 +21,14 @@ impl Document {
     pub fn open(filename: &str) -> Result<Self, std::io::Error> {
         let file = fs::read_to_string(filename)?;
         let mut rows = Vec::new();
+        let ps = SyntaxSet::load_defaults_nonewlines();
+        let ts = ThemeSet::load_defaults();
+        let syntax = ps.find_syntax_by_extension("rs").unwrap();
+        let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
         for line in file.lines() {
-            let mut line = Row::from(line);
-            line.highlight(None);
+            let ranges: Vec<(Style, &str)> = h.highlight_line(line, &ps).unwrap();
+            let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
+            let line = Row::from(escaped.as_str());
             rows.push(line)
         }
 
@@ -44,18 +54,16 @@ impl Document {
         if at.y == self.len() {
             let mut row = Row::default();
             row.insert(0, c);
-            row.highlight(None);
             self.rows.push(row);
         } else if at.y < self.len() {
             let row = self.rows.get_mut(at.y).unwrap();
             row.insert(at.x, c);
-            row.highlight(None);
         }
     }
     pub fn find(&mut self, query: &str, cursor_position: &Position) -> Option<Position> {
         for (y, row) in self.rows.iter().enumerate().skip(cursor_position.y) {
             if let Some(x) = row.find(query) {
-                return Some(Position {x, y});
+                return Some(Position { x, y });
             }
         }
         None
@@ -68,11 +76,8 @@ impl Document {
             self.rows.push(Row::default());
             return;
         }
-        let new_row = self.rows.get_mut(at.y).unwrap().split(at.x);
         let current_row = &mut self.rows[at.y];
         let mut new_row = current_row.split(at.x);
-        current_row.highlight(None);
-        new_row.highlight(None);
         #[allow(clippy::arithmetic_side_effects)]
         self.rows.insert(at.y + 1, new_row)
     }
@@ -87,11 +92,9 @@ impl Document {
             let next_row = self.rows.remove(at.y + 1);
             let row = self.rows.get_mut(at.y).unwrap();
             row.append(&next_row);
-            row.highlight(None)
         } else {
             let row = self.rows.get_mut(at.y).unwrap();
             row.delete(at.x);
-            row.highlight(None)
         }
     }
     pub fn delete_row(&mut self, at: usize) {
@@ -100,7 +103,6 @@ impl Document {
     }
     pub fn insert_row(&mut self, mut row: Row, at: usize) {
         self.dirty = true;
-        row.highlight(None);
         self.rows.insert(at, row)
     }
     pub fn row(&self, index: usize) -> Option<&Row> {
@@ -122,10 +124,5 @@ impl Document {
             self.dirty = false;
         }
         Ok(())
-    }
-    pub fn highlight(&mut self, query: Option<&String>) {
-        for row in &mut self.rows {
-            row.highlight(query);
-        }
     }
 }

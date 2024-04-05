@@ -1,20 +1,20 @@
-use crate::Terminal;
 use crate::Document;
 use crate::Row;
+use crate::Terminal;
 use std::env;
-use termion::color;
 use std::time::Duration;
 use std::time::Instant;
+use termion::color;
 use termion::event::Key;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
 const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63);
 
-// this is pretty cool i think
+// this is pretty cool i think something
 enum EditorMode {
-    Normal, 
-    CtrlXPressed
+    Normal,
+    CtrlXPressed,
 }
 pub struct Editor {
     should_quit: bool,
@@ -23,19 +23,19 @@ pub struct Editor {
     offset: Position,
     document: Document,
     status_message: StatusMessage,
-    mode: EditorMode
+    mode: EditorMode,
 }
 
 struct StatusMessage {
     text: String,
-    time: Instant
+    time: Instant,
 }
 
 impl StatusMessage {
     fn from(message: String) -> Self {
         Self {
             text: message,
-            time: Instant::now()
+            time: Instant::now(),
         }
     }
 }
@@ -43,7 +43,7 @@ impl StatusMessage {
 #[derive(Default)]
 pub struct Position {
     pub x: usize,
-    pub y: usize
+    pub y: usize,
 }
 
 impl Editor {
@@ -63,7 +63,8 @@ impl Editor {
     }
     pub fn default() -> Self {
         let args: Vec<String> = env::args().collect();
-        let mut initial_status = String::from("HELP: Ctrl-F = find | Ctrl-S = save | Ctrl-C = quit");
+        let mut initial_status =
+            String::from("HELP: Ctrl-F = find | Ctrl-S = save | Ctrl-C = quit");
         let document = if args.len() > 1 {
             let file_name = &args[1];
             let doc = Document::open(file_name);
@@ -98,10 +99,7 @@ impl Editor {
             self.draw_message_bar();
             let x = self.cursor_position.x.saturating_sub(self.offset.x);
             let y = self.cursor_position.y.saturating_sub(self.offset.y);
-            Terminal::cursor_position(&Position {
-                x,
-                y
-            });
+            Terminal::cursor_position(&Position { x, y });
         }
         Terminal::cursor_show();
         Terminal::flush()
@@ -119,7 +117,12 @@ impl Editor {
             file_name = name.clone();
             file_name.truncate(20);
         }
-        status = format!("{} - {} lines{}", file_name, self.document.len(), modified_indicator);
+        status = format!(
+            "{} - {} lines{}",
+            file_name,
+            self.document.len(),
+            modified_indicator
+        );
         let line_number = self.cursor_position.y.saturating_add(1);
         let document_length = self.document.len();
         let line_indicator = format!("{line_number}/{document_length}");
@@ -137,7 +140,7 @@ impl Editor {
     fn draw_message_bar(&self) {
         Terminal::clear_current_line();
         let message = &self.status_message;
-        if Instant::now() - message.time < Duration::new(5,0) {
+        if Instant::now() - message.time < Duration::new(5, 0) {
             let mut text = message.text.clone();
             text.truncate(self.terminal.size().width as usize);
             print!("{text}");
@@ -146,19 +149,17 @@ impl Editor {
     fn process_keypress(&mut self) -> Result<(), std::io::Error> {
         let pressed_key = Terminal::read_key()?;
         match pressed_key {
-            Key::Esc => {
-                match self.mode {
-                    EditorMode::CtrlXPressed => self.mode = EditorMode::Normal,
-                    _ => ()
-                }
-            }
+            Key::Esc => match self.mode {
+                EditorMode::CtrlXPressed => self.mode = EditorMode::Normal,
+                _ => (),
+            },
             Key::Ctrl('c') => {
                 if self.document.is_dirty() {
                     self.dirty_quit()?;
                 } else {
                     self.should_quit = true;
                 }
-            },
+            }
             Key::Ctrl('x') => {
                 self.mode = EditorMode::CtrlXPressed;
             }
@@ -171,7 +172,7 @@ impl Editor {
             Key::Char(c) => {
                 self.document.insert(&self.cursor_position, c);
                 self.move_cursor(Key::Right);
-            },
+            }
             Key::Backspace => {
                 if self.cursor_position.x > 0 || self.cursor_position.y > 0 {
                     self.move_cursor(Key::Left);
@@ -181,22 +182,13 @@ impl Editor {
             Key::Delete => {
                 self.document.delete(&self.cursor_position);
             }
-            Key::Up | Key::Down => {
-                match self.mode {
-                    EditorMode::CtrlXPressed => {
-                        self.move_row(pressed_key)
-                    } 
-                    EditorMode::Normal => {
-                        self.move_cursor(pressed_key)
-                    }
-                }
+            Key::Up | Key::Down => match self.mode {
+                EditorMode::CtrlXPressed => self.move_row(pressed_key),
+                EditorMode::Normal => self.move_cursor(pressed_key),
+            },
+            Key::Left | Key::Right | Key::PageDown | Key::PageUp | Key::End | Key::Home => {
+                self.move_cursor(pressed_key)
             }
-            Key::Left 
-            | Key::Right 
-            | Key::PageDown 
-            | Key::PageUp 
-            | Key::End
-            | Key::Home => self.move_cursor(pressed_key),
             _ => (),
         }
         self.scroll();
@@ -206,16 +198,14 @@ impl Editor {
     fn search(&mut self) {
         if let Some(query) = self.prompt("Search: ").unwrap_or(None) {
             if let Some(position) = self.document.find(&query[..], &self.cursor_position) {
-                self.document.highlight(Some(&query));
                 self.cursor_position = position;
             } else {
                 self.status_message = StatusMessage::from(format!("Not found :{}.", query));
             }
         }
-        self.document.highlight(None);
     }
     fn move_row(&mut self, key: Key) {
-        let Position {x:_, y} = self.cursor_position;
+        let Position { x: _, y } = self.cursor_position;
         if let Some(row) = self.document.row(y) {
             let mut new_row = row.clone();
             self.document.delete_row(y);
@@ -224,20 +214,22 @@ impl Editor {
                     if y > 0 {
                         self.document.insert_row(new_row, y - 1);
                     }
-                },
+                }
                 Key::Down => {
                     if y + 1 <= self.document.len() {
                         self.document.insert_row(new_row, y + 1);
                     }
                 }
-                _ => ()
+                _ => (),
             }
             self.move_cursor(key)
         }
     }
     fn dirty_quit(&mut self) -> Result<(), std::io::Error> {
         loop {
-            self.status_message =  StatusMessage::from("You will loose unsaved changes, enter to quit? esc to continue.".to_string());
+            self.status_message = StatusMessage::from(
+                "You will loose unsaved changes, enter to quit? esc to continue.".to_string(),
+            );
             self.refresh_screen()?;
             match Terminal::read_key()? {
                 Key::Char(c) => {
@@ -247,7 +239,9 @@ impl Editor {
                     }
                 }
                 Key::Esc => {
-                    self.status_message = StatusMessage::from(String::from("HELP: Ctrl-F = find | Ctrl-S = save | Ctrl-C = quit"));
+                    self.status_message = StatusMessage::from(String::from(
+                        "HELP: Ctrl-F = find | Ctrl-S = save | Ctrl-C = quit",
+                    ));
                     break;
                 }
                 _ => (),
@@ -271,7 +265,7 @@ impl Editor {
         }
     }
     fn scroll(&mut self) {
-        let Position {x, y} = self.cursor_position;
+        let Position { x, y } = self.cursor_position;
         let height = self.terminal.size().height as usize;
         let width = self.terminal.size().width as usize;
         let offset = &mut self.offset;
@@ -279,7 +273,7 @@ impl Editor {
             offset.y = y;
         } else if y >= offset.y.saturating_add(height) {
             offset.y = y.saturating_sub(height).saturating_add(1);
-        } 
+        }
         if x < offset.x {
             offset.x = x;
         } else if x >= offset.x.saturating_add(width) {
@@ -287,7 +281,7 @@ impl Editor {
         }
     }
     fn move_cursor(&mut self, key: Key) {
-        let Position {mut x, mut y} = self.cursor_position;
+        let Position { mut x, mut y } = self.cursor_position;
         let height = self.document.len();
         let terminal_height = self.terminal.size().height as usize;
         let width = if let Some(row) = self.document.row(y) {
@@ -300,8 +294,8 @@ impl Editor {
             Key::Down => {
                 if y < height {
                     y = y.saturating_add(1);
-                } 
-            },
+                }
+            }
             Key::Left => {
                 if x > 0 {
                     x -= 1;
@@ -311,9 +305,9 @@ impl Editor {
                         x = row.len();
                     } else {
                         x = 0;
-                    } 
+                    }
                 }
-            },
+            }
             Key::Right => {
                 if x < width {
                     x += 1;
@@ -321,14 +315,14 @@ impl Editor {
                     y += 1;
                     x = 0;
                 }
-            },
+            }
             Key::PageUp => {
                 y = if y > terminal_height {
                     y.saturating_sub(terminal_height)
                 } else {
                     0
                 }
-            },
+            }
             Key::PageDown => {
                 y = if y.saturating_add(terminal_height) < height {
                     y.saturating_add(terminal_height)
@@ -348,7 +342,7 @@ impl Editor {
         if x > end_of_row {
             x = end_of_row;
         }
-        self.cursor_position = Position {x, y}
+        self.cursor_position = Position { x, y }
     }
     fn draw_row(&self, row: &Row) {
         let width = self.terminal.size().width as usize;
@@ -361,11 +355,14 @@ impl Editor {
         let height = self.terminal.size().height;
         for terminal_row in 0..height {
             Terminal::clear_current_line();
-            if let Some(row) = self.document.row(self.offset.y.saturating_add(terminal_row as usize)) {
+            if let Some(row) = self
+                .document
+                .row(self.offset.y.saturating_add(terminal_row as usize))
+            {
                 self.draw_row(row);
             } else if self.document.is_empty() && terminal_row == height / 3 {
                 println!("Byron's Code Editor -- version {VERSION}\r");
-            }else {
+            } else {
                 println!("~\r");
             }
         }
@@ -373,7 +370,7 @@ impl Editor {
     fn prompt(&mut self, prompt: &str) -> Result<Option<String>, std::io::Error> {
         let mut result = String::new();
         loop {
-            self.status_message =  StatusMessage::from(format!("{prompt}{result}"));
+            self.status_message = StatusMessage::from(format!("{prompt}{result}"));
             self.refresh_screen()?;
             match Terminal::read_key()? {
                 Key::Backspace => result.truncate(result.len().saturating_sub(1)),
@@ -392,7 +389,7 @@ impl Editor {
         }
         self.status_message = StatusMessage::from(String::new());
         if result.is_empty() {
-            return Ok(None)
+            return Ok(None);
         }
         Ok(Some(result))
     }
