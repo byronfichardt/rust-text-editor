@@ -1,5 +1,4 @@
 use std::cmp;
-use termion::color;
 use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Default, Clone)]

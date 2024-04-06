@@ -6,6 +6,10 @@ use std::time::Duration;
 use std::time::Instant;
 use termion::color;
 use termion::event::Key;
+use syntect::easy::HighlightLines;
+use syntect::parsing::SyntaxSet;
+use syntect::highlighting::{ThemeSet, Style};
+use syntect::util::as_24_bit_terminal_escaped;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
@@ -48,9 +52,11 @@ pub struct Position {
 
 impl Editor {
     pub fn run(&mut self) {
+        let ps = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
         loop {
             // this is so the screen is refreshed every time the loop runs
-            if let Err(error) = self.refresh_screen() {
+            if let Err(error) = self.refresh_screen(&ps, &ts) {
                 die(&error);
             }
             if self.should_quit {
@@ -87,14 +93,14 @@ impl Editor {
             mode: EditorMode::Normal,
         }
     }
-    fn refresh_screen(&mut self) -> Result<(), std::io::Error> {
+    fn refresh_screen(&mut self, ps: &SyntaxSet, ts: &ThemeSet) -> Result<(), std::io::Error> {
         Terminal::cursor_hide();
         Terminal::cursor_position(&Position::default());
         if self.should_quit {
             Terminal::clear_screen();
             println!("Goodbye.\r");
         } else {
-            self.draw_rows();
+            self.draw_rows(ps, ts);
             self.draw_status_bar();
             self.draw_message_bar();
             let x = self.cursor_position.x.saturating_sub(self.offset.x);
@@ -207,7 +213,7 @@ impl Editor {
     fn move_row(&mut self, key: Key) {
         let Position { x: _, y } = self.cursor_position;
         if let Some(row) = self.document.row(y) {
-            let mut new_row = row.clone();
+            let new_row = row.clone();
             self.document.delete_row(y);
             match key {
                 Key::Up => {
@@ -226,11 +232,13 @@ impl Editor {
         }
     }
     fn dirty_quit(&mut self) -> Result<(), std::io::Error> {
+        let ps = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
         loop {
             self.status_message = StatusMessage::from(
                 "You will loose unsaved changes, enter to quit? esc to continue.".to_string(),
             );
-            self.refresh_screen()?;
+            self.refresh_screen(&ps, &ts)?;
             match Terminal::read_key()? {
                 Key::Char(c) => {
                     if c == '\n' {
@@ -344,14 +352,19 @@ impl Editor {
         }
         self.cursor_position = Position { x, y }
     }
-    fn draw_row(&self, row: &Row) {
+    fn draw_row(&self, row: &Row, ps: &SyntaxSet, ts: &ThemeSet) {
         let width = self.terminal.size().width as usize;
         let start = self.offset.x;
         let end = self.offset.x.saturating_add(width);
         let row = row.render(start, end);
-        println!("{row}\r");
+
+        let syntax = ps.find_syntax_by_extension("rs").unwrap();
+        let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+        let ranges: Vec<(Style, &str)> = h.highlight_line(row.as_str(), &ps).unwrap();
+        let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
+        println!("{escaped}\r");
     }
-    fn draw_rows(&self) {
+    fn draw_rows(&self, ps: &SyntaxSet, ts: &ThemeSet) {
         let height = self.terminal.size().height;
         for terminal_row in 0..height {
             Terminal::clear_current_line();
@@ -359,7 +372,7 @@ impl Editor {
                 .document
                 .row(self.offset.y.saturating_add(terminal_row as usize))
             {
-                self.draw_row(row);
+                self.draw_row(row, ps, ts);
             } else if self.document.is_empty() && terminal_row == height / 3 {
                 println!("Byron's Code Editor -- version {VERSION}\r");
             } else {
@@ -369,9 +382,11 @@ impl Editor {
     }
     fn prompt(&mut self, prompt: &str) -> Result<Option<String>, std::io::Error> {
         let mut result = String::new();
+        let ps = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
         loop {
             self.status_message = StatusMessage::from(format!("{prompt}{result}"));
-            self.refresh_screen()?;
+            self.refresh_screen(&ps, &ts)?;
             match Terminal::read_key()? {
                 Key::Backspace => result.truncate(result.len().saturating_sub(1)),
                 Key::Ctrl('c') | Key::Esc => {

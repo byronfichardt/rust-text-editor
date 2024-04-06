@@ -2,13 +2,7 @@ use std::{
     fs,
     io::{Error, Write},
 };
-
 use crate::{Position, Row};
-use syntect::{easy::HighlightLines, parsing::SyntaxSet};
-use syntect::{
-    highlighting::{Style, ThemeSet},
-    util::as_24_bit_terminal_escaped,
-};
 
 #[derive(Default)]
 pub struct Document {
@@ -21,14 +15,8 @@ impl Document {
     pub fn open(filename: &str) -> Result<Self, std::io::Error> {
         let file = fs::read_to_string(filename)?;
         let mut rows = Vec::new();
-        let ps = SyntaxSet::load_defaults_nonewlines();
-        let ts = ThemeSet::load_defaults();
-        let syntax = ps.find_syntax_by_extension("rs").unwrap();
-        let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
         for line in file.lines() {
-            let ranges: Vec<(Style, &str)> = h.highlight_line(line, &ps).unwrap();
-            let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
-            let line = Row::from(escaped.as_str());
+            let line = Row::from(line);
             rows.push(line)
         }
 
@@ -77,7 +65,7 @@ impl Document {
             return;
         }
         let current_row = &mut self.rows[at.y];
-        let mut new_row = current_row.split(at.x);
+        let new_row = current_row.split(at.x);
         #[allow(clippy::arithmetic_side_effects)]
         self.rows.insert(at.y + 1, new_row)
     }
@@ -101,7 +89,7 @@ impl Document {
         self.dirty = true;
         self.rows.remove(at);
     }
-    pub fn insert_row(&mut self, mut row: Row, at: usize) {
+    pub fn insert_row(&mut self, row: Row, at: usize) {
         self.dirty = true;
         self.rows.insert(at, row)
     }
